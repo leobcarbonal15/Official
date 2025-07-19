@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "59433856072",
+    "firebase_url": "https://hortifruti-adm-default-rtdb.firebaseio.com",
+    "project_id": "hortifruti-adm",
+    "storage_bucket": "hortifruti-adm.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:59433856072:android:d400b382382f091cd07c7d",
+        "android_client_info": {
+          "package_name": "com.example.myapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "59433856072-9mnajc1nnf2ihe7lj1f59ie9ljkp0m3s.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCsNEmyIyYDDbmnGpao4lRdNZDYZuBrHRI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "59433856072-9mnajc1nnf2ihe7lj1f59ie9ljkp0m3s.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
