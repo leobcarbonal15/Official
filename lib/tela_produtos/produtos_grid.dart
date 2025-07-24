@@ -10,9 +10,7 @@ class ProdutosGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('produtos_hortifruti')
-          .snapshots(), // removido filtro direto no Firestore
+      stream: FirebaseFirestore.instance.collection('estoque').snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -52,7 +50,9 @@ class ProdutosGrid extends StatelessWidget {
               ),
               itemCount: produtos.length,
               itemBuilder: (context, index) {
-                final produto = produtos[index].data() as Map<String, dynamic>;
+                final produtoDoc = produtos[index];
+                final produto = produtoDoc.data() as Map<String, dynamic>;
+                final idEstoque = produtoDoc.id;
 
                 final nome = produto['nome'] ?? 'Sem nome';
                 final preco = (produto['preco'] ?? 0).toDouble();
@@ -63,14 +63,17 @@ class ProdutosGrid extends StatelessWidget {
 
                 return GestureDetector(
                   onTap: () {
+                    final estoque = Map<String, dynamic>.from(produto['tamanhosComEstoque '] ?? {});
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) => TelaProduto(
+                          idEstoque: idEstoque,  // PASSAGEM CORRETA AQUI
                           nome: nome,
                           preco: preco,
                           descricao: descricao,
                           imagemUrl: imagemUrl,
+                          
                         ),
                       ),
                     );
@@ -111,7 +114,8 @@ class ProdutosGrid extends StatelessWidget {
                             ),
                             const SizedBox(height: 8),
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 8.0),
                               child: Text(
                                 nome,
                                 style: const TextStyle(
@@ -124,7 +128,8 @@ class ProdutosGrid extends StatelessWidget {
                               ),
                             ),
                             Padding(
-                              padding: const EdgeInsets.only(bottom: 10.0, top: 4),
+                              padding:
+                                  const EdgeInsets.only(bottom: 10.0, top: 4),
                               child: Text(
                                 'R\$ ${preco.toStringAsFixed(2)}',
                                 style: const TextStyle(

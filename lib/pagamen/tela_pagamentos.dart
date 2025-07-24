@@ -2,14 +2,22 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:myapp/adm%20_e_pedidos/gerenciamento_produtos.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(); // Isso é essencial!
   runApp(MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Pagamento',
+      home: Scaffold(body: Center(child: Text('Tela inicial'))),
+    );
+  }
 }
 
 class TelaPagamentos extends StatefulWidget {
@@ -29,7 +37,6 @@ class TelaPagamentos extends StatefulWidget {
 }
 
 class _TelaPagamentosState extends State<TelaPagamentos> {
-  // Buscar a chave PIX
   Future<Map<String, dynamic>?> _getChavePix() async {
     try {
       final snapshot = await FirebaseFirestore.instance
@@ -49,7 +56,6 @@ class _TelaPagamentosState extends State<TelaPagamentos> {
     }
   }
 
-  // Limpar a coleção 'carrinho'
   Future<void> limparCarrinho() async {
     try {
       final carrinhoRef = FirebaseFirestore.instance.collection('carrinho');
@@ -63,57 +69,94 @@ class _TelaPagamentosState extends State<TelaPagamentos> {
     }
   }
 
-  // Salvar pedido e limpar carrinho
-Future<void> salvarPedido(BuildContext context) async {
-  try {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+  Future<void> salvarPedido(BuildContext context) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
 
-    final email = user.email?.trim().toLowerCase();
-    if (email == null || email.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Erro: Email do usuário não encontrado.")),
-      );
-      return;
+      final email = user.email?.trim().toLowerCase();
+      if (email == null || email.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Erro: Email do usuário não encontrado.")),
+        );
+        return;
+      }
+
+     final pedido = {
+  'uid': user.uid,
+  'email': email,
+  'produtos': widget.produtos,
+  'forma_pagamento': widget.formaPagamento,
+  'data': Timestamp.now(),
+  'enviado': false,
+  'cancelado': false,
+  'endereco': widget.endereco,
+};
+
+      await FirebaseFirestore.instance.collection('pedidos').add(pedido);
+
+      // Atualizar o estoque
+      for (var produto in widget.produtos) {
+  final produtoId = produto['id'];
+  final quantidadeComprada = (produto['quantidade'] ?? 0) as int;
+  final tamanhoSelecionado = produto['tamanho'];
+
+  if (produtoId == null || tamanhoSelecionado == null || quantidadeComprada <= 0) {
+    print("Dados insuficientes para atualizar o estoque: $produto");
+    continue;
+  }
+
+  final tamanho = tamanhoSelecionado.toString();
+  final docRef = FirebaseFirestore.instance.collection('estoque').doc(produtoId);
+  final docSnap = await docRef.get();
+
+  if (docSnap.exists) {
+    final data = docSnap.data() as Map<String, dynamic>;
+    final estoqueMap = Map<String, dynamic>.from(data['tamanhosComEstoque'] ?? {});
+
+    if (!estoqueMap.containsKey(tamanho)) {
+      print("Tamanho $tamanho não encontrado no produto $produtoId.");
+      continue;
     }
 
-    final pedido = {
-      'uid': user.uid,
-      'email': email, // ✅ Adicionado aqui
-      'produtos': widget.produtos,
-      'endereco': widget.endereco,
-      'forma_pagamento': widget.formaPagamento,
-      'data': Timestamp.now(),
-    };
+    final estoqueAtual = (estoqueMap[tamanho] ?? 0) as int;
+    final novoEstoque = (estoqueAtual - quantidadeComprada).clamp(0, double.infinity).toInt();
 
-    await FirebaseFirestore.instance.collection('pedidos').add(pedido);
+    estoqueMap[tamanho] = novoEstoque;
 
-    // ✅ Notificação salva com email do usuário
-    await FirebaseFirestore.instance.collection('notificacoes').add({
-      'titulo': 'Pedido realizado',
-      'mensagem': 'Seu pedido foi feito com sucesso!',
-      'email': email, // ✅ Usar email ao invés de uid
-      'data': Timestamp.now(),
-      'lido': false,
-    });
+    print('Atualizando estoque: Produto $produtoId | Tamanho $tamanho | De $estoqueAtual para $novoEstoque');
 
-    await limparCarrinho();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Pagamento confirmado, pedido salvo e carrinho limpo!"),
-      ),
-    );
-
-    _exibirChavePix(context);
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Erro ao salvar o pedido: $e")),
-    );
+    await docRef.update({'tamanhosComEstoque': estoqueMap});
+  } else {
+    print("Documento de estoque $produtoId não encontrado.");
   }
 }
 
-  // Exibe chave PIX
+
+      // Criar notificação
+      await FirebaseFirestore.instance.collection('notificacoes').add({
+        'titulo': 'Pedido realizado',
+        'mensagem': 'Seu pedido foi feito com sucesso!',
+        'email': email,
+        'data': Timestamp.now(),
+        'lido': false,
+        
+      });
+
+      await limparCarrinho();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Pedido salvo e estoque atualizado!")),
+      );
+
+      _exibirChavePix(context);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Erro ao salvar o pedido: $e")),
+      );
+    }
+  }
+
   Future<void> _exibirChavePix(BuildContext context) async {
     Map<String, dynamic>? chaveData = await _getChavePix();
 
@@ -173,53 +216,92 @@ Future<void> salvarPedido(BuildContext context) async {
       );
     }
   }
+@override
+Widget build(BuildContext context) {
+  double total = widget.produtos.fold(0.0, (soma, p) {
+    return soma + ((p['preco'] ?? 0) * (p['quantidade'] ?? 1));
+  });
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Pagamento"),
-        backgroundColor: Colors.amber.shade700,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("Forma de Pagamento: ${widget.formaPagamento}",
-                style: const TextStyle(fontSize: 18)),
-            const SizedBox(height: 20),
-            Text(
-                "Endereço: ${widget.endereco['logradouro']}, ${widget.endereco['cidade']}",
-                style: const TextStyle(fontSize: 18)),
-            const SizedBox(height: 20),
-            const Text("Produtos:", style: TextStyle(fontSize: 18)),
-            const SizedBox(height: 10),
-            Expanded(
-              child: ListView.builder(
-                itemCount: widget.produtos.length,
-                itemBuilder: (context, index) {
-                  final produto = widget.produtos[index];
-                  return ListTile(
-                    title: Text(produto['nome']),
-                    subtitle: Text(
-                        "R\$ ${produto['preco'].toStringAsFixed(2)} x ${produto['quantidade']}"),
-                  );
-                },
-              ),
+  return Scaffold(
+    appBar: AppBar(
+      title: const Text("Pagamento"),
+      backgroundColor: Colors.amber.shade700,
+    ),
+    body: Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("Forma de Pagamento: ${widget.formaPagamento}",
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 20),
+
+          const Text("Resumo da Compra:",
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+
+          const SizedBox(height: 10),
+          Expanded(
+            child: ListView.builder(
+              itemCount: widget.produtos.length,
+              itemBuilder: (context, index) {
+                final p = widget.produtos[index];
+                return Card(
+                  margin: const EdgeInsets.symmetric(vertical: 6),
+                  child: ListTile(
+                    leading: p['imagem'] != null
+                        ? Image.network(p['imagem'], width: 50, height: 50, fit: BoxFit.cover)
+                        : const Icon(Icons.image),
+                    title: Text(p['nome'] ?? ''),
+                    subtitle: Text("Tamanho: ${p['tamanho']} | Quantidade: ${p['quantidade']}"),
+                    trailing: Text("R\$ ${(p['preco'] * p['quantidade']).toStringAsFixed(2)}"),
+                  ),
+                );
+              },
             ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () => salvarPedido(context),
-              child: const Text("Confirmar Pagamento"),
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
-                backgroundColor: Colors.green,
-              ),
+          ),
+
+          const Divider(thickness: 1.5),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("Total:",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text("R\$ ${total.toStringAsFixed(2)}",
+                  style: const TextStyle(fontSize: 20, color: Colors.green, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.yellow.shade100,
+              borderRadius: BorderRadius.circular(8),
             ),
-          ],
-        ),
+            child: const Text(
+              "⚠ Após o pagamento via Pix, envie o comprovante pelo WhatsApp para que possamos separar os produtos para retirada!",
+              style: TextStyle(fontSize: 16),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          ElevatedButton.icon(
+            onPressed: () => salvarPedido(context),
+            icon: const Icon(Icons.check_circle_outline),
+            label: const Text("Confirmar Pagamento"),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              minimumSize: const Size(double.infinity, 50),
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+       
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
+
 }

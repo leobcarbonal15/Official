@@ -1,130 +1,111 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:myapp/firebase_options.dart';
-import 'package:myapp/tela_cadastro_produto/cadastro_produto.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  runApp(const CadastroProduto());
-
-  
-}
-
-class TelaProduto extends StatelessWidget {
+class TelaProduto extends StatefulWidget {
+  final String idEstoque;
   final String nome;
   final double preco;
   final String descricao;
   final String imagemUrl;
+  final Map<String, dynamic> estoquePorTamanho;
 
   const TelaProduto({
     super.key,
+    required this.idEstoque,
     required this.nome,
     required this.preco,
     required this.descricao,
     required this.imagemUrl,
+    required this.estoquePorTamanho,
   });
-  void _adicionarAoCarrinho(BuildContext context) async {
-  try {
-    await FirebaseFirestore.instance.collection('carrinho').add({
-      'nome': nome,
-      'imagem': imagemUrl,
-      'preco': preco,
-      'quantidade': 1,
-    });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Produto adicionado ao carrinho!"),
-      ),
-    );
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Erro ao adicionar: $e")),
-    );
-  }
+  @override
+  State<TelaProduto> createState() => _TelaProdutoState();
 }
+
+class _TelaProdutoState extends State<TelaProduto> {
+  String? tamanhoSelecionado;
+  int quantidade = 1;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFAF3E0),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF4E342E),
-        title: Text(
-          nome,
-          style: const TextStyle(color: Colors.white),
-        ),
-        iconTheme: const IconThemeData(color: Colors.white),
+        title: Text(widget.nome),
       ),
       body: SingleChildScrollView(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Image.network(
-              imagemUrl,
-              width: double.infinity,
+              widget.imagemUrl,
               height: 250,
+              width: double.infinity,
               fit: BoxFit.cover,
             ),
             const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Text(
-                nome,
-                style: const TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF4E342E),
-                ),
-              ),
+            Text(
+              widget.nome,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Text(
-                'R\$ ${preco.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 22,
-                  color: Colors.green,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+            Text(
+              'R\$ ${widget.preco.toStringAsFixed(2)}',
+              style: const TextStyle(fontSize: 18, color: Colors.green),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Text(
-                descricao,
-                style: const TextStyle(fontSize: 16),
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(widget.descricao),
             ),
-            const SizedBox(height: 30),
-            Center(
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6D4C41),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
-                ),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text("Produto adicionado ao carrinho!",
-                      style: TextStyle(color: Colors.white),
-                      
+            const SizedBox(height: 20),
+            const Text(
+              'Selecione o tamanho:',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 10,
+              children: widget.estoquePorTamanho.entries.map((entry) {
+                final tamanho = entry.key;
+                final estoque = entry.value as int;
+                final esgotado = estoque <= 0;
+
+                return ElevatedButton(
+                  onPressed: esgotado
+                      ? null
+                      : () {
+                          setState(() {
+                            tamanhoSelecionado = tamanho;
+                          });
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: tamanhoSelecionado == tamanho
+                        ? Colors.blue
+                        : esgotado
+                            ? Colors.grey
+                            : Colors.black,
+                  ),
+                  child: Text(
+                    tamanho,
+                    style: TextStyle(
+                      color: esgotado ? Colors.white60 : Colors.white,
                     ),
-                  ));
-                  _adicionarAoCarrinho(context);
-                },
-                icon: const Icon(Icons.add_shopping_cart, color: Colors.white),
-                label: const Text(
-                  "Adicionar ao Carrinho",
-                  style: TextStyle(fontSize: 16, color: Colors.white),
-                ),
-              ),
+                  ),
+                );
+              }).toList(),
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: tamanhoSelecionado == null
+                  ? null
+                  : () {
+                      // Adicionar à sacola ou lógica de compra
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(
+                            'Produto adicionado: ${widget.nome} - Tamanho $tamanhoSelecionado'),
+                      ));
+                    },
+              child: const Text('Adicionar à sacola'),
+            ),
           ],
         ),
       ),

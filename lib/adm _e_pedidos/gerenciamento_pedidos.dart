@@ -36,11 +36,8 @@ class TelaGerenciamentoPedidos extends StatelessWidget {
   Future<void> registrarNotificacao(
       DocumentSnapshot pedidoSnapshot, String emailDoCliente) async {
     try {
-      print("🔔 Salvando notificação para ${emailDoCliente.trim().toLowerCase()}");
-
       final pedidoData = pedidoSnapshot.data() as Map<String, dynamic>? ?? {};
       final produtos = pedidoData['produtos'] as List<dynamic>? ?? [];
-
       final produto = produtos.isNotEmpty && produtos[0] is Map<String, dynamic>
           ? produtos[0] as Map<String, dynamic>
           : {};
@@ -53,15 +50,11 @@ class TelaGerenciamentoPedidos extends StatelessWidget {
         'pedidoId': pedidoSnapshot.id,
         'produtos': produtos,
         'endereco': pedidoData['endereco'] ?? {},
-        // 'forma_pagamento': pedidoData['forma_pagamento'] ?? 'Não informado', // removido
-        'email': emailDoCliente.toString().trim().toLowerCase(),
+        'email': emailDoCliente.trim().toLowerCase(),
         'lido': false,
       });
-
-      print("✅ Notificação salva com sucesso.");
-    } catch (e, stacktrace) {
-      print("❌ Erro ao salvar notificação: $e");
-      print("📌 Stacktrace: $stacktrace");
+    } catch (e) {
+      print("Erro ao salvar notificação: $e");
     }
   }
 
@@ -76,8 +69,9 @@ class TelaGerenciamentoPedidos extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Pedidos Realizados", style: TextStyle(color: Colors.white)),
-        backgroundColor: Colors.black, // cor preta no appbar
+        title: const Text("Pedidos Realizados",
+            style: TextStyle(color: Colors.white)),
+        backgroundColor: Colors.black,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       backgroundColor: const Color(0xFFFAF3E0),
@@ -138,12 +132,61 @@ class PedidoCard extends StatefulWidget {
 
 class _PedidoCardState extends State<PedidoCard> {
   late bool enviado;
+  late bool cancelado;
 
   @override
   void initState() {
     super.initState();
-    enviado = widget.pedido.data().toString().contains('enviado') &&
-        widget.pedido['enviado'] == true;
+    final data = widget.pedido.data() as Map<String, dynamic>;
+    enviado = data['enviado'] == true;
+    cancelado = data['cancelado'] == true;
+  }
+
+  Future<void> devolverProdutosAoEstoque(List<dynamic> produtos) async {
+    final firestore = FirebaseFirestore.instance;
+    final batch = firestore.batch();
+
+    for (var produto in produtos) {
+      if (produto is Map<String, dynamic>) {
+        final produtoId = produto['id'];
+        final quantidade = produto['quantidade'] ?? 0;
+        final tamanho = produto['tamanho']?.toString();
+
+        if (produtoId == null || tamanho == null) continue;
+
+        final docRef = firestore.collection('estoque').doc(produtoId);
+        final docSnap = await docRef.get();
+
+        if (!docSnap.exists) continue;
+
+        final dados = docSnap.data() as Map<String, dynamic>;
+        final estoqueMap =
+            Map<String, dynamic>.from(dados['tamanhosComEstoque'] ?? {});
+
+        final estoqueAtual = (estoqueMap[tamanho] ?? 0) as int;
+        final novoEstoque = estoqueAtual + quantidade;
+
+        estoqueMap[tamanho] = novoEstoque;
+        batch.update(docRef, {'tamanhosComEstoque': estoqueMap});
+      }
+    }
+
+    await batch.commit();
+  }
+
+  Future<void> cancelarPedido(DocumentSnapshot pedido) async {
+    final pedidoId = pedido.id;
+    final pedidoData = pedido.data() as Map<String, dynamic>;
+    final produtos = pedidoData['produtos'] as List<dynamic>? ?? [];
+
+    await FirebaseFirestore.instance
+        .collection('pedidos')
+        .doc(pedidoId)
+        .update({
+      'cancelado': true,
+    });
+
+    await devolverProdutosAoEstoque(produtos);
   }
 
   @override
@@ -155,10 +198,7 @@ class _PedidoCardState extends State<PedidoCard> {
         ? pedido['endereco'] as Map<String, dynamic>
         : null;
 
-    // NOVO: Pega quem vai retirar o pedido, campo "retirador"
-    final retirador = pedido.data().toString().contains('retirante')
-        ? pedido['retirante'] as String
-        : null;
+    final retirador = endereco?['retirante']?.toString()?.trim();
 
     return Card(
       margin: const EdgeInsets.all(12),
@@ -179,28 +219,33 @@ class _PedidoCardState extends State<PedidoCard> {
           ],
         ),
         children: [
-          if (endereco != null)
-            ListTile(
-              title: Text("Endereço de ${endereco['nomeUsuario'] ?? 'Usuário'}"),
-              subtitle: Text(
-                '${endereco['logradouro']}, ${endereco['cidade']}, ${endereco['estado']} - ${endereco['cep']}',
-              ),
-            ),
-          // Retirador aparece aqui, se existir
-          if (retirador != null)
+          if (retirador != null && retirador.isNotEmpty)
             ListTile(
               leading: const Icon(Icons.person_pin_circle_outlined),
               title: const Text('Quem vai retirar:'),
               subtitle: Text(retirador),
+            )
+          else
+            const ListTile(
+              leading: Icon(Icons.person_pin_circle_outlined),
+              title: Text('Quem vai retirar:'),
+              subtitle: Text('Não informado'),
             ),
-          // Forma de pagamento removida
-
           ...produtos.map((produto) {
+            final nome = produto['nome'] ?? 'Produto';
+            final quantidade = produto['quantidade'] ?? 0;
+            final preco = produto['preco'] ?? 0.0;
+            final imagem = produto['imagem'] ?? '';
+            final tamanho = produto['tamanho']?.toString() ?? 'N/A';
+
             return ListTile(
-              leading: Image.network(produto['imagem'], width: 50, height: 50),
-              title: Text(produto['nome']),
-              subtitle: Text("Quantidade: ${produto['quantidade']}"),
-              trailing: Text("R\$ ${produto['preco'].toStringAsFixed(2)}"),
+              leading: imagem.isNotEmpty
+                  ? Image.network(imagem,
+                      width: 50, height: 50, fit: BoxFit.cover)
+                  : const Icon(Icons.image_not_supported),
+              title: Text(nome),
+              subtitle: Text("Quantidade: $quantidade\nTamanho: $tamanho"),
+              trailing: Text("R\$ ${preco.toStringAsFixed(2)}"),
             );
           }).toList(),
           CheckboxListTile(
@@ -217,28 +262,78 @@ class _PedidoCardState extends State<PedidoCard> {
             onChanged: enviado
                 ? null
                 : (value) async {
-                    final email = widget.pedido.data().toString().contains('email')
-                        ? widget.pedido['email']
+                    final email = pedido.data().toString().contains('email')
+                        ? pedido['email']
                         : null;
 
                     if (email != null) {
-                      await widget.onMarcarComoEnviado(widget.pedido.id);
+                      await widget.onMarcarComoEnviado(pedido.id);
                       await widget.onNotificar(email);
                       setState(() {
                         enviado = true;
                       });
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("Produto marcado como separado!")),
-                      );
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("Erro: e-mail do cliente não encontrado.")),
+                        const SnackBar(
+                            content: Text("Produto marcado como separado!")),
                       );
                     }
                   },
             secondary: enviado
                 ? const Icon(Icons.check_circle, color: Colors.green)
-                : const Icon(Icons.notifications), // troquei para sino
+                : const Icon(Icons.notifications),
+            controlAffinity: ListTileControlAffinity.leading,
+          ),
+          CheckboxListTile(
+            title: Text(
+              cancelado ? "Pedido Cancelado ✔" : "Cancelar Pedido",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: cancelado ? Colors.red : Colors.black,
+              ),
+            ),
+            value: cancelado,
+            activeColor: Colors.red,
+            checkColor: Colors.white,
+            onChanged: cancelado
+                ? null
+                : (value) async {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text("Confirmar Cancelamento"),
+                        content: const Text(
+                            "Tem certeza que deseja cancelar este pedido? Isso devolverá os produtos ao estoque."),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text("Cancelar"),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text(
+                              "Confirmar",
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirm == true) {
+                      await cancelarPedido(pedido);
+                      setState(() {
+                        cancelado = true;
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text(
+                                "Pedido cancelado e produtos devolvidos ao estoque.")),
+                      );
+                    }
+                  },
+            secondary: cancelado
+                ? const Icon(Icons.cancel, color: Colors.red)
+                : const Icon(Icons.cancel_outlined),
             controlAffinity: ListTileControlAffinity.leading,
           ),
         ],

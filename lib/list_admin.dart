@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:myapp/adm _e_pedidos/estatisticas.dart';
 import 'package:myapp/adm _e_pedidos/gerenciamento_produtos.dart';
+import 'package:myapp/adm%20_e_pedidos/estoque.dart';
 import 'package:myapp/telas/notification/notificacoes_grid.dart';
 import 'package:myapp/telas/perfil_usuario/usuario.dart';
 import 'package:myapp/tela_cadastro_produto/cadastro_produto.dart';
@@ -196,6 +197,14 @@ List<Widget> getAdminDrawerItems(BuildContext context) {
       title: const Text('Link do WhatsApp'),
       onTap: () {
         _showWhatsAppInputDialog(context);
+      },
+    ),
+     ListTile(
+      leading: const FaIcon(FontAwesomeIcons.whatsapp, color: Color(0xFF4E342E)),
+      title: const Text('Link do Estoque'),
+      onTap: () {
+        Navigator.push(
+            context, MaterialPageRoute(builder: (_) =>  EstoqueHortifrutiPage()));
       },
     ),
   ];

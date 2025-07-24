@@ -55,7 +55,7 @@ class _GerenciarProdutosState extends State<GerenciarProdutos> {
   // Função para alternar o status de estoque
   void _alternarEstoque(String id, bool emEstoque) {
     FirebaseFirestore.instance
-        .collection('produtos_hortifruti')
+        .collection('estoque')
         .doc(id)
         .update({'emEstoque': !emEstoque});
   }
@@ -63,7 +63,7 @@ class _GerenciarProdutosState extends State<GerenciarProdutos> {
   // Função para alternar o status de promoção
   void _alternarPromocao(String id, bool emPromocao) {
     FirebaseFirestore.instance
-        .collection('produtos_hortifruti')
+        .collection('estoque')
         .doc(id)
         .update({'emPromocao': !emPromocao});
   }
@@ -151,7 +151,7 @@ class _GerenciarProdutosState extends State<GerenciarProdutos> {
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
-                  .collection('produtos_hortifruti')
+                  .collection('estoque')
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {

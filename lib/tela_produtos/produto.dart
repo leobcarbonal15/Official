@@ -1,21 +1,8 @@
-// Suggested code may be subject to a license. Learn more: ~LicenseLog:2567292558.
-// Suggested code may be subject to a license. Learn more: ~LicenseLog:3105867724.
-// Suggested code may be subject to a license. Learn more: ~LicenseLog:1830487194.
-// Suggested code may be subject to a license. Learn more: ~LicenseLog:3823162991.
-// Suggested code may be subject to a license. Learn more: ~LicenseLog:1115933080.
-// Suggested code may be subject to a license. Learn more: ~LicenseLog:3493806306.
-// Suggested code may be subject to a license. Learn more: ~LicenseLog:1580007321.
-// Suggested code may be subject to a license. Learn more: ~LicenseLog:3864776400.
-// Suggested code may be subject to a license. Learn more: ~LicenseLog:478334793.
-// Suggested code may be subject to a license. Learn more: ~LicenseLog:1879788821.
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:myapp/firebase_options.dart';
-import 'package:myapp/tela_cadastro_produto/cadastro_produto.dart';
 
-
-class TelaProduto extends StatelessWidget {
+class TelaProduto extends StatefulWidget {
+  final String idEstoque;
   final String nome;
   final double preco;
   final String descricao;
@@ -23,26 +10,103 @@ class TelaProduto extends StatelessWidget {
 
   const TelaProduto({
     super.key,
+    required this.idEstoque,
     required this.nome,
     required this.preco,
     required this.descricao,
     required this.imagemUrl,
   });
 
+  @override
+  State<TelaProduto> createState() => _TelaProdutoState();
+}
+
+class _TelaProdutoState extends State<TelaProduto> {
+  Map<String, int> tamanhosEstoque = {};
+  String tipoTamanho = '';
+  bool carregandoEstoque = true;
+  String? tamanhoSelecionado;
+
+  @override
+  void initState() {
+    super.initState();
+    carregarEstoque();
+  }
+
+  Future<void> carregarEstoque() async {
+  try {
+    final docRef = FirebaseFirestore.instance.collection('estoque').doc(widget.idEstoque);
+    final snapshot = await docRef.get();
+
+    if (!snapshot.exists) {
+      setState(() {
+        carregandoEstoque = false;
+      });
+      return;
+    }
+
+    final data = snapshot.data();
+    if (data == null || data['tamanhosComEstoque'] == null) {
+      setState(() {
+        tamanhosEstoque = {};
+        carregandoEstoque = false;
+      });
+      return;
+    }
+
+    final rawMap = Map<String, dynamic>.from(data['tamanhosComEstoque']);
+    final estoqueMap = {
+      for (var entry in rawMap.entries) entry.key: (entry.value as num).toInt()
+    };
+
+    setState(() {
+      tipoTamanho = data['tipoTamanho'] ?? '';
+      tamanhosEstoque = estoqueMap;
+      carregandoEstoque = false;
+    });
+  } catch (e) {
+    print("Erro ao carregar estoque: $e");
+    setState(() {
+      tamanhosEstoque = {};
+      carregandoEstoque = false;
+    });
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao carregar estoque: $e')),
+      );
+    }
+  }
+}
+
+
  void _adicionarAoCarrinho(BuildContext context) async {
+  if (tamanhoSelecionado == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Selecione um tamanho antes de adicionar.")),
+    );
+    return;
+  }
+
+  if (tamanhosEstoque[tamanhoSelecionado]! <= 0) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Estoque esgotado para esse tamanho.")),
+    );
+    return;
+  }
+
   try {
     await FirebaseFirestore.instance.collection('carrinho').add({
-      'nome': nome,
-      'imagem': imagemUrl,
-      'preco': preco,
+      'id': widget.idEstoque, // <-- ESSENCIAL para atualizar estoque depois
+      'nome': widget.nome,
+      'imagem': widget.imagemUrl,
+      'preco': widget.preco,
       'quantidade': 1,
+      'tamanho': tamanhoSelecionado.toString(),
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text(
-          "Produto adicionado ao carrinho!",
-          style: TextStyle(color: Colors.white)),
+        content: Text("Produto adicionado ao carrinho!", style: TextStyle(color: Colors.white)),
       ),
     );
   } catch (e) {
@@ -50,14 +114,6 @@ class TelaProduto extends StatelessWidget {
       SnackBar(content: Text("Erro ao adicionar: $e")),
     );
   }
-}
-
-  void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  runApp(const CadastroProduto());
-
-  
 }
 
 
@@ -68,89 +124,139 @@ class TelaProduto extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: const Color.fromARGB(255, 0, 0, 0),
         title: Text(
-          nome,
+          widget.nome,
           style: const TextStyle(color: Colors.white),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-     body: Container(
-  color: const Color(0xFFFAF3E0), // Fundo bege
-  child: Center(
-    child: Container(
-      width: double.infinity,
-      margin: const EdgeInsets.all(16.0), // Espaço para a "borda bege"
-      padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-        color: Colors.white, // Fundo branco
-        borderRadius: BorderRadius.circular(12), // Bordas arredondadas (opcional)
-        boxShadow: [
-          BoxShadow(
-            color: const Color.fromARGB(255, 0, 0, 0).withOpacity(0.2), // sombra leve
-            spreadRadius: 2,
-            blurRadius: 5,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Image.network(
-                    imagemUrl,
-                    width: double.infinity,
-                    height: 250,
-                    fit: BoxFit.cover,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    nome,
-                    style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      color: Color.fromARGB(255, 0, 0, 0),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'R\$ ${preco.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      fontSize: 22,
-                      color: Colors.green,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    descricao,
-                    style: const TextStyle(fontSize: 16),
-                  ),
-                  const SizedBox(height: 30),
-                ],
-              ),
-            ),
-          ),
-          SizedBox(
+      body: Container(
+        color: const Color(0xFFFAF3E0),
+        child: Center(
+          child: Container(
             width: double.infinity,
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color.fromARGB(255, 5, 5, 5),
-                padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
-              ),
-              onPressed: () {
-                _adicionarAoCarrinho(context);
-              },
-              icon: const Icon(Icons.add_shopping_cart, color: Colors.white),
-              label: const Text("Adicionar ao Carrinho",
-                  style: TextStyle(fontSize: 16, color: Colors.white)),
+            margin: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(16.0),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color.fromARGB(255, 0, 0, 0).withOpacity(0.2),
+                  spreadRadius: 2,
+                  blurRadius: 5,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Image.network(
+                          widget.imagemUrl,
+                          width: double.infinity,
+                          height: 250,
+                          fit: BoxFit.cover,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          widget.nome,
+                          style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            color: Color.fromARGB(255, 0, 0, 0),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'R\$ ${widget.preco.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 22,
+                            color: Colors.green,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          widget.descricao,
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                        const SizedBox(height: 20),
+                        const Text(
+                          'Tamanhos Disponíveis:',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 10),
+                        carregandoEstoque
+                            ? const Center(child: CircularProgressIndicator())
+                            : tamanhosEstoque.isEmpty
+                                ? const Text("Sem informações de estoque.")
+                                :Wrap(
+  spacing: 8,
+  children: tamanhosEstoque.entries.map((entry) {
+    final tamanho = entry.key;
+    final estoque = entry.value;
+    final bool selecionado = tamanhoSelecionado == tamanho;
+
+    return ChoiceChip(
+      label: Text(
+        estoque > 0 ? "$tamanho - $estoque unid" : "$tamanho - Esgotado",
+      ),
+      selected: selecionado,
+      onSelected: estoque > 0
+          ? (_) {
+              setState(() {
+                tamanhoSelecionado = tamanho;
+              });
+            }
+          : null,
+      selectedColor: Colors.black,
+      backgroundColor: estoque > 0 ? Colors.grey[300] : Colors.grey[200],
+      labelStyle: TextStyle(
+        color: estoque > 0
+            ? (selecionado ? Colors.white : Colors.black)
+            : Colors.grey,
+        fontWeight: FontWeight.bold,
+      ),
+      shape: StadiumBorder(
+        side: BorderSide(
+          color: estoque > 0 ? Colors.black : Colors.grey,
+        ),
+      ),
+    );
+  }).toList(),
+),
+
+                        const SizedBox(height: 30),
+                      ],
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color.fromARGB(255, 5, 5, 5),
+                      padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                    ),
+                    onPressed: () {
+                      _adicionarAoCarrinho(context);
+                    },
+                    icon: const Icon(Icons.add_shopping_cart, color: Colors.white),
+                    label: const Text(
+                      "Adicionar ao Carrinho",
+                      style: TextStyle(fontSize: 16, color: Colors.white),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
-    ),
-  ),
-));
-  }}
+    );
+  }
+}
