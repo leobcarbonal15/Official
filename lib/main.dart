@@ -28,7 +28,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'l&M Modas',
       theme: ThemeData(useMaterial3: true,    iconTheme: IconThemeData(color: Colors.white), ),
       debugShowCheckedModeBanner: false,
       home: AuthGuard.checkUserLogin(authenticatedScreen: const MyHomePage(title: '')),
