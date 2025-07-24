@@ -16,11 +16,24 @@ class TelaComunic extends StatelessWidget {
     return MaterialApp(
       title: 'Contato',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(primarySwatch: Colors.blue),
+      theme: ThemeData(
+        primarySwatch: Colors.green,
+        scaffoldBackgroundColor: Colors.transparent, // fundo será degradê
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green[700],
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(30),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
+            textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+        ),
+      ),
       home: const MyHomePage(
         title: '',
         style: TextStyle(
-          color: Color.fromARGB(255, 255, 255, 255),
+          color: Color.fromARGB(255, 0, 0, 0),
           fontSize: 24.0,
           fontWeight: FontWeight.bold,
         ),
@@ -62,7 +75,7 @@ class _MyHomePageState extends State<MyHomePage> {
         });
       }
     } catch (e) {
-      print('Erro ao buscar link do WhatsApp: $e');
+      debugPrint('Erro ao buscar link do WhatsApp: $e');
     } finally {
       setState(() {
         _isLoading = false;
@@ -70,80 +83,131 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  // Função para abrir o link do WhatsApp, tratando o caso de falta de "https://"
   Future<void> _openWhatsAppLink() async {
     String url = latestWhatsAppLink ?? '';
-    
-    // Verifica se o link começa com http ou https, se não adicionar o https://
+
     if (!url.startsWith('http')) {
-      url = 'https://' + url;  // Adiciona "https://" se não estiver presente
+      url = 'https://' + url;
     }
 
     final uri = Uri.parse(url);
-    
-    // Tenta abrir o link
+
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Não foi possível abrir o link.')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível abrir o link.')),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFFAF3E0),
+      // Fundo degradê
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Color(0xFFa8e063),
+              Color(0xFF56ab2f),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: SafeArea(
+          child: _isLoading
+              ? const Center(
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                  ),
+                )
+              : Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Card(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      elevation: 12,
+                      shadowColor: Colors.black54,
+                      color: Colors.white,
+                      child: Padding(
+                        padding: const EdgeInsets.all(32.0),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              "Fale com o vendedor",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.green[900],
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            SizedBox(
+                              width: size.width * 0.5,
+                              height: size.width * 0.5,
+                              child: Image.network(
+                                'https://static.vecteezy.com/system/resources/previews/018/930/564/non_2x/whatsapp-logo-whatsapp-icon-whatsapp-transparent-free-png.png',
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                            const SizedBox(height: 32),
+                            ElevatedButton.icon(
+                              onPressed:
+                                  latestWhatsAppLink != null ? _openWhatsAppLink : null,
+                              icon: const Icon(Icons.chat_bubble_outline, color: Colors.white, size: 28),
+                              label: const Text(
+                                'Entre em contato via WhatsApp',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 16, horizontal: 28),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(50),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            if (latestWhatsAppLink == null)
+                              Text(
+                                "Link do WhatsApp indisponível no momento.",
+                                style: TextStyle(
+                                  color: Colors.red[700],
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+        ),
+      ),
       appBar: AppBar(
-        backgroundColor: const Color.fromARGB(255, 0, 0, 0),
+        backgroundColor: Colors.black,
+        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
           onPressed: () =>
               Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => MyApp())),
+          tooltip: 'Voltar',
         ),
-        title: Text(widget.title),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              children: <Widget>[
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: <Widget>[
-                    const Text(
-                      "Fale com o vendedor",
-                      style: TextStyle(
-                        color: Color.fromARGB(255, 0, 0, 0),
-                        fontSize: 24.0,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Padding(padding: EdgeInsets.all(16.0)),
-                    Image.network(
-                      'https://static.vecteezy.com/system/resources/previews/018/930/564/non_2x/whatsapp-logo-whatsapp-icon-whatsapp-transparent-free-png.png',
-                      width: 150,
-                      height: 150,
-                    ),
-                    const Padding(padding: EdgeInsets.all(16.0)),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                      ),
-                      onPressed: latestWhatsAppLink != null
-                          ? _openWhatsAppLink  // Chama a nova função para abrir o link
-                          : null,
-                      icon: const Icon(Icons.chat, color: Colors.white),
-                      label: const Text(
-                        'Entre em contato via WhatsApp',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                    const Padding(padding: EdgeInsets.all(16.0)),
-                  ],
-                ),
-              ],
-            ),
     );
   }
 }

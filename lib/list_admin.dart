@@ -200,8 +200,15 @@ List<Widget> getAdminDrawerItems(BuildContext context) {
       },
     ),
      ListTile(
-      leading: const FaIcon(FontAwesomeIcons.whatsapp, color: Color(0xFF4E342E)),
-      title: const Text('Link do Estoque'),
+      leading: const FaIcon(FontAwesomeIcons.coins, color: Color(0xFF4E342E)),
+      title: const Text('Chave Pix'),
+      onTap: () {
+        _mostrarDialogoChavePix(context);
+      },
+    ),
+     ListTile(
+      leading: const FaIcon(FontAwesomeIcons.store, color: Color(0xFF4E342E)),
+      title: const Text('Estoque'),
       onTap: () {
         Navigator.push(
             context, MaterialPageRoute(builder: (_) =>  EstoqueHortifrutiPage()));
