@@ -27,41 +27,39 @@ class CarrinhoMLPage extends StatefulWidget {
 
 class _CarrinhoMLPageState extends State<CarrinhoMLPage> {
   String? retirante;
+  final user = FirebaseAuth.instance.currentUser;
 
- void aumentarQuantidade(DocumentSnapshot doc) async {
-  final data = doc.data() as Map<String, dynamic>;
+  void aumentarQuantidade(DocumentSnapshot doc) async {
+    final data = doc.data() as Map<String, dynamic>;
+    final produtoId = data['id'];
+    final tamanho = data['tamanho']?.toString();
+    final quantidadeAtual = data['quantidade'];
 
-  final produtoId = data['id'];
-  final tamanho = data['tamanho']?.toString();
-  final quantidadeAtual = data['quantidade'];
+    if (produtoId == null || tamanho == null) return;
 
-  if (produtoId == null || tamanho == null) return;
+    final docEstoque = await FirebaseFirestore.instance
+        .collection('estoque')
+        .doc(produtoId)
+        .get();
 
-  final docEstoque = await FirebaseFirestore.instance
-      .collection('estoque')
-      .doc(produtoId)
-      .get();
+    if (!docEstoque.exists) return;
 
-  if (!docEstoque.exists) return;
+    final estoqueData = docEstoque.data();
+    final estoquePorTamanho = estoqueData?['tamanhosComEstoque'] ?? {};
 
-  final estoqueData = docEstoque.data();
-  final estoquePorTamanho = estoqueData?['tamanhosComEstoque'] ?? {};
+    final estoqueDisponivel = estoquePorTamanho[tamanho];
 
-  final estoqueDisponivel = estoquePorTamanho[tamanho];
-
-  if (estoqueDisponivel != null && quantidadeAtual < estoqueDisponivel) {
-    // Só atualiza se houver estoque suficiente
-    await FirebaseFirestore.instance
-        .collection('carrinho')
-        .doc(doc.id)
-        .update({'quantidade': quantidadeAtual + 1});
-  } else {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Quantidade máxima em estoque atingida!")),
-    );
+    if (estoqueDisponivel != null && quantidadeAtual < estoqueDisponivel) {
+      await FirebaseFirestore.instance
+          .collection('carrinho')
+          .doc(doc.id)
+          .update({'quantidade': quantidadeAtual + 1});
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Quantidade máxima em estoque atingida!")),
+      );
+    }
   }
-}
-
 
   void diminuirQuantidade(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
@@ -86,6 +84,12 @@ class _CarrinhoMLPageState extends State<CarrinhoMLPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (user == null) {
+      return const Scaffold(
+        body: Center(child: Text("Usuário não autenticado.")),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Meu Carrinho', style: TextStyle(color: Colors.white)),
@@ -103,7 +107,10 @@ class _CarrinhoMLPageState extends State<CarrinhoMLPage> {
       ),
       backgroundColor: const Color(0xFFFAF3E0),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('carrinho').snapshots(),
+        stream: FirebaseFirestore.instance
+            .collection('carrinho')
+            .where('uid', isEqualTo: user!.uid)
+            .snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
@@ -130,7 +137,7 @@ class _CarrinhoMLPageState extends State<CarrinhoMLPage> {
                           fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) => const Icon(Icons.image),
                         ),
-                        title: Text(data['nome']),
+                        title: Text(data['nome'] ?? ''),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -203,6 +210,7 @@ class _CarrinhoMLPageState extends State<CarrinhoMLPage> {
 
                         final carrinhoSnapshot = await FirebaseFirestore.instance
                             .collection('carrinho')
+                            .where('uid', isEqualTo: user!.uid)
                             .get();
 
                         if (carrinhoSnapshot.docs.isEmpty) {
@@ -212,44 +220,47 @@ class _CarrinhoMLPageState extends State<CarrinhoMLPage> {
                           return;
                         }
 
-                        final produtos = carrinhoSnapshot.docs.map((doc) => doc.data()).toList();
+                        final produtos = carrinhoSnapshot.docs.map((doc) {
+                          final data = doc.data();
+                          return data;
+                        }).toList();
 
-                        showDialog(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('Pagamento via Pix'),
-                            content: const Text(
-                              'O pagamento é feito via Pix.\n\n'
-                              'Após o pagamento, envie o comprovante pelo WhatsApp para que possamos separar os produtos para retirada.',
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.of(context).pop(),
-                                child: const Text('Cancelar'),
-                              ),
-                              ElevatedButton.icon(
-                                icon: const Icon(Icons.pix),
-                                label: const Text('Ir para Pagamento'),
-                              onPressed: () {
-  print('Produtos enviados para pagamento: $produtos'); // <-- ADICIONE ISSO
+                        for (final doc in carrinhoSnapshot.docs) {
+                          final data = doc.data();
+                          final produtoId = data['id'];
+                          final tamanho = data['tamanho'];
+                          final quantidade = data['quantidade'];
 
-  Navigator.of(context).pop();
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => TelaPagamentos(
-        produtos: produtos,
-        endereco: {'retirante': retirante},
-        formaPagamento: 'Pix',
-      ),
-    ),
-  );
-},
+                          // Atualiza estoque
+                          final estoqueRef = FirebaseFirestore.instance.collection('estoque').doc(produtoId);
+                          await FirebaseFirestore.instance.runTransaction((transaction) async {
+                            final snapshot = await transaction.get(estoqueRef);
+                            final estoqueData = snapshot.data() as Map<String, dynamic>;
+                            final tamanhos = Map<String, dynamic>.from(estoqueData['tamanhosComEstoque'] ?? {});
 
-                                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                              ),
-                            ],
-                          ),
+                            if (tamanhos.containsKey(tamanho)) {
+                              tamanhos[tamanho] = (tamanhos[tamanho] - quantidade).clamp(0, double.infinity);
+                              transaction.update(estoqueRef, {'tamanhosComEstoque': tamanhos});
+                            }
+                          });
+
+                          // Salva em pedidos
+                          await FirebaseFirestore.instance.collection('pedidos').add({
+                            'retirante': retirante,
+                            'nome': data['nome'],
+                            'imagem': data['imagem'],
+                            'preco': data['preco'],
+                            'quantidade': quantidade,
+                            'tamanho': tamanho,
+                            'timestamp': FieldValue.serverTimestamp(),
+                          });
+
+                          // Remove do carrinho
+                          await FirebaseFirestore.instance.collection('carrinho').doc(doc.id).delete();
+                        }
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Pedido finalizado com sucesso!")),
                         );
                       },
                       icon: const Icon(Icons.shopping_cart_checkout),

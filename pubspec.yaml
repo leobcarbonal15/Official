@@ -53,7 +53,7 @@ flutter:
 
 flutter_launcher_icons:
   android: true
-  image_path: "/assets/icon/logolm.jpg"
+  image_path: "assets/icon/logolm.jpg"
   min_sdk_android: 21
 
 flutter_native_splash:
