@@ -92,14 +92,18 @@ class _CarrinhoMLPageState extends State<CarrinhoMLPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Meu Carrinho', style: TextStyle(color: Colors.white)),
+        title:
+            const Text('Meu Carrinho', style: TextStyle(color: Colors.white)),
         backgroundColor: Colors.black,
         leading: BackButton(
           color: Colors.white,
           onPressed: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => MyHomePage(title: '',)),
+              MaterialPageRoute(
+                  builder: (context) => MyHomePage(
+                        title: '',
+                      )),
             );
           },
         ),
@@ -191,86 +195,91 @@ class _CarrinhoMLPageState extends State<CarrinhoMLPage> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text("Total:",
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                            style: TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.bold)),
                         Text(
                           "R\$ ${calcularTotal(docs).toStringAsFixed(2)}",
-                          style: const TextStyle(fontSize: 18, color: Colors.green),
+                          style: const TextStyle(
+                              fontSize: 18, color: Colors.green),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        if (retirante == null || retirante!.trim().isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text("Informe quem vai retirar o pedido!")),
-                          );
-                          return;
-                        }
+           ElevatedButton.icon(
+  onPressed: () async {
+    if (retirante == null || retirante!.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Informe quem vai retirar o pedido!")),
+      );
+      return;
+    }
 
-                        final carrinhoSnapshot = await FirebaseFirestore.instance
-                            .collection('carrinho')
-                            .where('uid', isEqualTo: user!.uid)
-                            .get();
+    final carrinhoSnapshot = await FirebaseFirestore.instance
+        .collection('carrinho')
+        .where('uid', isEqualTo: user!.uid)
+        .get();
 
-                        if (carrinhoSnapshot.docs.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text("Carrinho está vazio!")),
-                          );
-                          return;
-                        }
+    if (carrinhoSnapshot.docs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Carrinho está vazio!")),
+      );
+      return;
+    }
 
-                        final produtos = carrinhoSnapshot.docs.map((doc) {
-                          final data = doc.data();
-                          return data;
-                        }).toList();
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Confirmar Pedido"),
+        content: const Text("Seu pedido será separado e estará disponível para retirada na loja. Deseja continuar?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancelar"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Continuar"),
+          ),
+        ],
+      ),
+    );
 
-                        for (final doc in carrinhoSnapshot.docs) {
-                          final data = doc.data();
-                          final produtoId = data['id'];
-                          final tamanho = data['tamanho'];
-                          final quantidade = data['quantidade'];
+    if (confirm != true) return;
 
-                          // Atualiza estoque
-                          final estoqueRef = FirebaseFirestore.instance.collection('estoque').doc(produtoId);
-                          await FirebaseFirestore.instance.runTransaction((transaction) async {
-                            final snapshot = await transaction.get(estoqueRef);
-                            final estoqueData = snapshot.data() as Map<String, dynamic>;
-                            final tamanhos = Map<String, dynamic>.from(estoqueData['tamanhosComEstoque'] ?? {});
+    // Constrói a lista de produtos para enviar para a tela de pagamento
+    final produtos = carrinhoSnapshot.docs.map((doc) {
+      final data = doc.data();
+      return {
+        'id': data['id'],
+        'nome': data['nome'],
+        'imagem': data['imagem'],
+        'preco': data['preco'],
+        'quantidade': data['quantidade'],
+        'tamanho': data['tamanho'],
+      };
+    }).toList();
 
-                            if (tamanhos.containsKey(tamanho)) {
-                              tamanhos[tamanho] = (tamanhos[tamanho] - quantidade).clamp(0, double.infinity);
-                              transaction.update(estoqueRef, {'tamanhosComEstoque': tamanhos});
-                            }
-                          });
+    // Redireciona para a tela de pagamento
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TelaPagamentos(
+          produtos: produtos,
+          retirante: retirante!, endereco: {}, formaPagamento: '',
+        ),
+      ),
+    );
+  },
+  icon: const Icon(Icons.shopping_cart_checkout),
+  label: const Text("Confirmar Compra"),
+  style: ElevatedButton.styleFrom(
+    minimumSize: const Size(double.infinity, 50),
+    backgroundColor: Colors.amber.shade700,
+    textStyle: const TextStyle(fontSize: 16),
+  ),
+)
 
-                          // Salva em pedidos
-                          await FirebaseFirestore.instance.collection('pedidos').add({
-                            'retirante': retirante,
-                            'nome': data['nome'],
-                            'imagem': data['imagem'],
-                            'preco': data['preco'],
-                            'quantidade': quantidade,
-                            'tamanho': tamanho,
-                            'timestamp': FieldValue.serverTimestamp(),
-                          });
 
-                          // Remove do carrinho
-                          await FirebaseFirestore.instance.collection('carrinho').doc(doc.id).delete();
-                        }
-
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text("Pedido finalizado com sucesso!")),
-                        );
-                      },
-                      icon: const Icon(Icons.shopping_cart_checkout),
-                      label: const Text("Finalizar Compra"),
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 50),
-                        backgroundColor: Colors.amber.shade700,
-                        textStyle: const TextStyle(fontSize: 16),
-                      ),
-                    ),
                   ],
                 ),
               ),

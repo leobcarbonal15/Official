@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // necessário
 
 class TelaProduto extends StatefulWidget {
   final String idEstoque;
@@ -79,7 +80,16 @@ class _TelaProdutoState extends State<TelaProduto> {
 }
 
 
- void _adicionarAoCarrinho(BuildContext context) async {
+void _adicionarAoCarrinho(BuildContext context) async {
+  final user = FirebaseAuth.instance.currentUser;
+
+  if (user == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Você precisa estar logado.")),
+    );
+    return;
+  }
+
   if (tamanhoSelecionado == null) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("Selecione um tamanho antes de adicionar.")),
@@ -95,19 +105,36 @@ class _TelaProdutoState extends State<TelaProduto> {
   }
 
   try {
-    await FirebaseFirestore.instance.collection('carrinho').add({
-      'id': widget.idEstoque, // <-- ESSENCIAL para atualizar estoque depois
-      'nome': widget.nome,
-      'imagem': widget.imagemUrl,
-      'preco': widget.preco,
-      'quantidade': 1,
-      'tamanho': tamanhoSelecionado.toString(),
-    });
+    final carrinhoRef = FirebaseFirestore.instance.collection('carrinho');
+
+    // Verifica se já existe esse item no carrinho
+    final existing = await carrinhoRef
+        .where('uid', isEqualTo: user.uid)
+        .where('id', isEqualTo: widget.idEstoque)
+        .where('tamanho', isEqualTo: tamanhoSelecionado)
+        .limit(1)
+        .get();
+
+    if (existing.docs.isNotEmpty) {
+      // Já existe, então só aumenta a quantidade
+      final docId = existing.docs.first.id;
+      final currentQty = existing.docs.first['quantidade'] ?? 1;
+      await carrinhoRef.doc(docId).update({'quantidade': currentQty + 1});
+    } else {
+      // Não existe, cria novo item
+      await carrinhoRef.add({
+        'uid': user.uid,
+        'id': widget.idEstoque,
+        'nome': widget.nome,
+        'imagem': widget.imagemUrl,
+        'preco': widget.preco,
+        'quantidade': 1,
+        'tamanho': tamanhoSelecionado.toString(),
+      });
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Produto adicionado ao carrinho!", style: TextStyle(color: Colors.white)),
-      ),
+      const SnackBar(content: Text("Produto adicionado ao carrinho!")),
     );
   } catch (e) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -115,7 +142,6 @@ class _TelaProdutoState extends State<TelaProduto> {
     );
   }
 }
-
 
   @override
   Widget build(BuildContext context) {

@@ -29,7 +29,7 @@ class TelaPagamentos extends StatefulWidget {
     Key? key,
     required this.produtos,
     required this.endereco,
-    required this.formaPagamento,
+    required this.formaPagamento, required String retirante,
   }) : super(key: key);
 
   @override
