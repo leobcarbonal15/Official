@@ -1,0 +1,13 @@
+I0731 22:20:11.609766    2261 load.go:37] Reloading schema and connectors...
+I0731 22:20:11.639954    2261 control.go:84] [/emulator/myapp 9f7c] UpdateResources(): done
+Schema: sources: schema/schema.gql [2088B] 
+Connector "default": sources: connector/mutations.gql [1233B] connector/queries.gql [1802B] 
+I0731 22:20:11.665961    2261 collector.go:107] schema extensions wrote into "/home/user/myapp/dataconnect/.dataconnect/schema"
+Generated sources: prelude.gql [73172B] 
+I0731 22:20:11.666978    2261 load.go:115] Finished reloading
+I0731 22:20:11.681213    2261 dev.go:95] Listening on address (HTTP + gRPC): 127.0.0.1:50001
+E0731 23:37:50.519365    2261 load.go:23] Could not load config from "/home/user/myapp/dataconnect": could not find dataconnect.yaml in `/home/user/myapp/dataconnect`
+E0731 23:37:51.667735    2261 load.go:23] Could not load config from "/home/user/myapp/dataconnect": could not find dataconnect.yaml in `/home/user/myapp/dataconnect`
+E0731 23:38:01.676318    2261 load.go:23] Could not load config from "/home/user/myapp/dataconnect": could not find dataconnect.yaml in `/home/user/myapp/dataconnect`
+E0731 23:38:11.668437    2261 load.go:23] Could not load config from "/home/user/myapp/dataconnect": could not find dataconnect.yaml in `/home/user/myapp/dataconnect`
+E0731 23:38:21.670883    2261 load.go:23] Could not load config from "/home/user/myapp/dataconnect": could not find dataconnect.yaml in `/home/user/myapp/dataconnect`
