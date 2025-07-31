@@ -96,53 +96,54 @@ class _TelaPagamentosState extends State<TelaPagamentos> {
       await FirebaseFirestore.instance.collection('pedidos').add(pedido);
 
       // Atualizar o estoque
-      for (var produto in widget.produtos) {
+     // Atualizar o estoque
+for (var produto in widget.produtos) {
   final produtoId = produto['id'];
   final quantidadeComprada = (produto['quantidade'] ?? 0) as int;
   final tamanhoSelecionado = produto['tamanho'];
+  final corSelecionada = produto['cor']; // pega a cor também
 
-  if (produtoId == null || tamanhoSelecionado == null || quantidadeComprada <= 0) {
+  if (produtoId == null || tamanhoSelecionado == null || corSelecionada == null || quantidadeComprada <= 0) {
     print("Dados insuficientes para atualizar o estoque: $produto");
     continue;
   }
 
-  final tamanho = tamanhoSelecionado.toString();
   final docRef = FirebaseFirestore.instance.collection('estoque').doc(produtoId);
   final docSnap = await docRef.get();
 
   if (docSnap.exists) {
     final data = docSnap.data() as Map<String, dynamic>;
-    final estoqueMap = Map<String, dynamic>.from(data['tamanhosComEstoque'] ?? {});
+    final Map<String, dynamic> variacoes = Map<String, dynamic>.from(data['variacoes'] ?? {});
 
-    if (!estoqueMap.containsKey(tamanho)) {
-      print("Tamanho $tamanho não encontrado no produto $produtoId.");
+    if (!variacoes.containsKey(corSelecionada)) {
+      print("Cor $corSelecionada não encontrada no produto $produtoId.");
       continue;
     }
 
-    final estoqueAtual = (estoqueMap[tamanho] ?? 0) as int;
+    final Map<String, dynamic> tamanhosMap = Map<String, dynamic>.from(variacoes[corSelecionada]);
+
+    if (!tamanhosMap.containsKey(tamanhoSelecionado)) {
+      print("Tamanho $tamanhoSelecionado não encontrado na cor $corSelecionada do produto $produtoId.");
+      continue;
+    }
+
+    final estoqueAtual = (tamanhosMap[tamanhoSelecionado] ?? 0) as int;
     final novoEstoque = (estoqueAtual - quantidadeComprada).clamp(0, double.infinity).toInt();
 
-    estoqueMap[tamanho] = novoEstoque;
+    tamanhosMap[tamanhoSelecionado] = novoEstoque;
+    variacoes[corSelecionada] = tamanhosMap;
 
-    print('Atualizando estoque: Produto $produtoId | Tamanho $tamanho | De $estoqueAtual para $novoEstoque');
+    print('Atualizando estoque: Produto $produtoId | Cor $corSelecionada | Tamanho $tamanhoSelecionado | De $estoqueAtual para $novoEstoque');
 
-    await docRef.update({'tamanhosComEstoque': estoqueMap});
+    await docRef.update({'variacoes': variacoes});
   } else {
     print("Documento de estoque $produtoId não encontrado.");
   }
 }
 
 
-      // Criar notificação
-      await FirebaseFirestore.instance.collection('notificacoes').add({
-        'titulo': 'Pedido realizado',
-        'mensagem': 'Seu pedido foi feito com sucesso!',
-        'email': email,
-        'data': Timestamp.now(),
-        'lido': false,
-        
-      });
-
+    
+     
       await limparCarrinho();
 
       ScaffoldMessenger.of(context).showSnackBar(

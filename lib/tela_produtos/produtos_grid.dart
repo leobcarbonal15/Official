@@ -57,23 +57,25 @@ class ProdutosGrid extends StatelessWidget {
                 final nome = produto['nome'] ?? 'Sem nome';
                 final preco = (produto['preco'] ?? 0).toDouble();
                 final descricao = produto['descricao'] ?? '';
-                final imagemUrl = produto['imagemUrl'] ??
-                    'https://via.placeholder.com/150'; // imagem padrão
+                final imagensList = produto['imagens'] as List<dynamic>?;
+                final imagens = imagensList != null
+                    ? imagensList.map((e) => e.toString()).toList()
+                    : <String>[];
                 final emPromocao = produto['emPromocao'] ?? false;
 
                 return GestureDetector(
                   onTap: () {
-                    final estoque = Map<String, dynamic>.from(produto['tamanhosComEstoque '] ?? {});
+                    final estoque = Map<String, dynamic>.from(
+                        produto['tamanhosComEstoque '] ?? {});
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) => TelaProduto(
-                          idEstoque: idEstoque,  // PASSAGEM CORRETA AQUI
+                          idEstoque: idEstoque,
                           nome: nome,
                           preco: preco,
                           descricao: descricao,
-                          imagemUrl: imagemUrl,
-                          
+                          imagens: imagens,
                         ),
                       ),
                     );
@@ -105,7 +107,11 @@ class ProdutosGrid extends StatelessWidget {
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(10),
                                     image: DecorationImage(
-                                      image: NetworkImage(imagemUrl),
+                                      image: NetworkImage(
+                                        imagens.isNotEmpty
+                                            ? imagens[0]
+                                            : 'https://via.placeholder.com/150',
+                                      ),
                                       fit: BoxFit.cover,
                                     ),
                                   ),

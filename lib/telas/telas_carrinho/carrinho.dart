@@ -28,32 +28,42 @@ class CarrinhoMLPage extends StatefulWidget {
 class _CarrinhoMLPageState extends State<CarrinhoMLPage> {
   String? retirante;
   final user = FirebaseAuth.instance.currentUser;
+  Map<String, bool> expandirObservacao = {};
+  Map<String, String> observacoes = {};
+
+  Future<int> _obterEstoqueDisponivel(String produtoId, String cor, String tamanho) async {
+    final docEstoque = await FirebaseFirestore.instance.collection('estoque').doc(produtoId).get();
+
+    if (!docEstoque.exists) return 0;
+
+    final data = docEstoque.data();
+    if (data == null || data['variacoes'] == null) return 0;
+
+    final Map<String, dynamic> variacoes = Map<String, dynamic>.from(data['variacoes']);
+
+    if (!variacoes.containsKey(cor)) return 0;
+
+    final Map<String, dynamic> tamanhos = Map<String, dynamic>.from(variacoes[cor]);
+    final estoque = tamanhos[tamanho];
+
+    if (estoque == null) return 0;
+
+    return (estoque as num).toInt();
+  }
 
   void aumentarQuantidade(DocumentSnapshot doc) async {
     final data = doc.data() as Map<String, dynamic>;
-    final produtoId = data['id'];
-    final tamanho = data['tamanho']?.toString();
-    final quantidadeAtual = data['quantidade'];
+    final produtoId = data['id'] as String?;
+    final cor = data['cor'] as String?;
+    final tamanho = data['tamanho'] as String?;
+    final quantidadeAtual = (data['quantidade'] as num?)?.toInt() ?? 1;
 
-    if (produtoId == null || tamanho == null) return;
+    if (produtoId == null || cor == null || tamanho == null) return;
 
-    final docEstoque = await FirebaseFirestore.instance
-        .collection('estoque')
-        .doc(produtoId)
-        .get();
+    final estoqueDisponivel = await _obterEstoqueDisponivel(produtoId, cor, tamanho);
 
-    if (!docEstoque.exists) return;
-
-    final estoqueData = docEstoque.data();
-    final estoquePorTamanho = estoqueData?['tamanhosComEstoque'] ?? {};
-
-    final estoqueDisponivel = estoquePorTamanho[tamanho];
-
-    if (estoqueDisponivel != null && quantidadeAtual < estoqueDisponivel) {
-      await FirebaseFirestore.instance
-          .collection('carrinho')
-          .doc(doc.id)
-          .update({'quantidade': quantidadeAtual + 1});
+    if (quantidadeAtual < estoqueDisponivel) {
+      await FirebaseFirestore.instance.collection('carrinho').doc(doc.id).update({'quantidade': quantidadeAtual + 1});
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Quantidade máxima em estoque atingida!")),
@@ -63,11 +73,10 @@ class _CarrinhoMLPageState extends State<CarrinhoMLPage> {
 
   void diminuirQuantidade(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
-    if (data['quantidade'] > 1) {
-      FirebaseFirestore.instance
-          .collection('carrinho')
-          .doc(doc.id)
-          .update({'quantidade': data['quantidade'] - 1});
+    final quantidadeAtual = (data['quantidade'] as num?)?.toInt() ?? 1;
+
+    if (quantidadeAtual > 1) {
+      FirebaseFirestore.instance.collection('carrinho').doc(doc.id).update({'quantidade': quantidadeAtual - 1});
     }
   }
 
@@ -78,7 +87,9 @@ class _CarrinhoMLPageState extends State<CarrinhoMLPage> {
   double calcularTotal(List<QueryDocumentSnapshot> docs) {
     return docs.fold(0.0, (total, doc) {
       final data = doc.data() as Map<String, dynamic>;
-      return total + (data['preco'] * data['quantidade']);
+      final preco = (data['preco'] as num?)?.toDouble() ?? 0.0;
+      final quantidade = (data['quantidade'] as num?)?.toInt() ?? 0;
+      return total + preco * quantidade;
     });
   }
 
@@ -92,18 +103,14 @@ class _CarrinhoMLPageState extends State<CarrinhoMLPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title:
-            const Text('Meu Carrinho', style: TextStyle(color: Colors.white)),
+        title: const Text('Meu Carrinho', style: TextStyle(color: Colors.white)),
         backgroundColor: Colors.black,
         leading: BackButton(
           color: Colors.white,
           onPressed: () {
             Navigator.push(
               context,
-              MaterialPageRoute(
-                  builder: (context) => MyHomePage(
-                        title: '',
-                      )),
+              MaterialPageRoute(builder: (context) => MyHomePage(title: '')),
             );
           },
         ),
@@ -111,10 +118,7 @@ class _CarrinhoMLPageState extends State<CarrinhoMLPage> {
       ),
       backgroundColor: const Color(0xFFFAF3E0),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('carrinho')
-            .where('uid', isEqualTo: user!.uid)
-            .snapshots(),
+        stream: FirebaseFirestore.instance.collection('carrinho').where('uid', isEqualTo: user!.uid).snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
@@ -133,39 +137,71 @@ class _CarrinhoMLPageState extends State<CarrinhoMLPage> {
 
                     return Card(
                       margin: const EdgeInsets.all(10),
-                      child: ListTile(
-                        leading: Image.network(
-                          data['imagem'],
-                          width: 60,
-                          height: 60,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Icon(Icons.image),
-                        ),
-                        title: Text(data['nome'] ?? ''),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text("R\$ ${data['preco'].toStringAsFixed(2)}"),
-                            const SizedBox(height: 6),
-                            Row(
+                      child: Column(
+                        children: [
+                          ListTile(
+                            leading: Image.network(
+                              data['imagem'] ?? '',
+                              width: 60,
+                              height: 60,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Icon(Icons.image),
+                            ),
+                            title: Text(data['nome'] ?? ''),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                IconButton(
-                                  icon: const Icon(Icons.remove_circle_outline),
-                                  onPressed: () => diminuirQuantidade(doc),
-                                ),
-                                Text('${data['quantidade']}'),
-                                IconButton(
-                                  icon: const Icon(Icons.add_circle_outline),
-                                  onPressed: () => aumentarQuantidade(doc),
+                                Text("R\$ ${((data['preco'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2)}"),
+                                Text("Cor: ${data['cor'] ?? '-'}"),
+                                Text("Tamanho: ${data['tamanho'] ?? '-'}"),
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.remove_circle_outline),
+                                      onPressed: () => diminuirQuantidade(doc),
+                                    ),
+                                    Text('${data['quantidade']}'),
+                                    IconButton(
+                                      icon: const Icon(Icons.add_circle_outline),
+                                      onPressed: () => aumentarQuantidade(doc),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
-                          ],
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => removerItem(doc),
-                        ),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () => removerItem(doc),
+                            ),
+                          ),
+                          ExpansionTile(
+                            title: const Text("Adicionar Observação"),
+                            leading: const Icon(Icons.edit_note),
+                            initiallyExpanded: expandirObservacao[doc.id] ?? false,
+                            onExpansionChanged: (expanded) {
+                              setState(() {
+                                expandirObservacao[doc.id] = expanded;
+                              });
+                            },
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                child: TextField(
+                                  onChanged: (value) {
+                                    observacoes[doc.id] = value;
+                                  },
+                                  controller: TextEditingController(text: observacoes[doc.id] ?? ''),
+                                  maxLines: 3,
+                                  decoration: const InputDecoration(
+                                    hintText: 'Ex: camisa azul com botão preto',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     );
                   },
@@ -195,91 +231,129 @@ class _CarrinhoMLPageState extends State<CarrinhoMLPage> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text("Total:",
-                            style: TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.bold)),
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                         Text(
                           "R\$ ${calcularTotal(docs).toStringAsFixed(2)}",
-                          style: const TextStyle(
-                              fontSize: 18, color: Colors.green),
+                          style: const TextStyle(fontSize: 18, color: Colors.green),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
-           ElevatedButton.icon(
-  onPressed: () async {
-    if (retirante == null || retirante!.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Informe quem vai retirar o pedido!")),
-      );
-      return;
-    }
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        if (retirante == null || retirante!.trim().isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text("Informe quem vai retirar o pedido!")),
+                          );
+                          return;
+                        }
 
-    final carrinhoSnapshot = await FirebaseFirestore.instance
-        .collection('carrinho')
-        .where('uid', isEqualTo: user!.uid)
-        .get();
+                        final carrinhoSnapshot = await FirebaseFirestore.instance
+                            .collection('carrinho')
+                            .where('uid', isEqualTo: user!.uid)
+                            .get();
 
-    if (carrinhoSnapshot.docs.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Carrinho está vazio!")),
-      );
-      return;
-    }
+                        if (carrinhoSnapshot.docs.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text("Carrinho está vazio!")),
+                          );
+                          return;
+                        }
 
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Confirmar Pedido"),
-        content: const Text("Seu pedido será separado e estará disponível para retirada na loja. Deseja continuar?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text("Cancelar"),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text("Continuar"),
-          ),
-        ],
-      ),
-    );
+                        // Verificação de estoque para cada item
+                        bool estoqueOk = true;
+                        List<String> errosEstoque = [];
 
-    if (confirm != true) return;
+                        for (var doc in carrinhoSnapshot.docs) {
+                          final data = doc.data();
+                          final produtoId = data['id'] as String?;
+                          final cor = data['cor'] as String?;
+                          final tamanho = data['tamanho'] as String?;
+                          final quantidade = (data['quantidade'] as num?)?.toInt() ?? 0;
 
-    // Constrói a lista de produtos para enviar para a tela de pagamento
-    final produtos = carrinhoSnapshot.docs.map((doc) {
-      final data = doc.data();
-      return {
-        'id': data['id'],
-        'nome': data['nome'],
-        'imagem': data['imagem'],
-        'preco': data['preco'],
-        'quantidade': data['quantidade'],
-        'tamanho': data['tamanho'],
-      };
-    }).toList();
+                          if (produtoId == null || cor == null || tamanho == null) {
+                            errosEstoque.add("${data['nome']} (dados incompletos)");
+                            estoqueOk = false;
+                            continue;
+                          }
 
-    // Redireciona para a tela de pagamento
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => TelaPagamentos(
-          produtos: produtos,
-          retirante: retirante!, endereco: {}, formaPagamento: '',
-        ),
-      ),
-    );
-  },
-  icon: const Icon(Icons.shopping_cart_checkout),
-  label: const Text("Confirmar Compra"),
-  style: ElevatedButton.styleFrom(
-    minimumSize: const Size(double.infinity, 50),
-    backgroundColor: Colors.amber.shade700,
-    textStyle: const TextStyle(fontSize: 16),
-  ),
-)
+                          final disponivel = await _obterEstoqueDisponivel(produtoId, cor, tamanho);
 
+                          if (disponivel < quantidade) {
+                            errosEstoque.add("${data['nome']} (estoque: $disponivel, solicitado: $quantidade)");
+                            estoqueOk = false;
+                          }
+                        }
 
+                        if (!estoqueOk) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                "Produtos com estoque insuficiente:\n${errosEstoque.join('\n')}",
+                              ),
+                              backgroundColor: Colors.redAccent,
+                              duration: const Duration(seconds: 6),
+                            ),
+                          );
+                          return;
+                        }
+
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text("Confirmar Pedido"),
+                            content: const Text(
+                                "Seu pedido será separado e estará disponível para retirada na loja. Deseja continuar?"),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text("Cancelar"),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                child: const Text("Continuar"),
+                              ),
+                            ],
+                          ),
+                        );
+
+                        if (confirm != true) return;
+
+                        final produtos = carrinhoSnapshot.docs.map((doc) {
+                          final data = doc.data();
+                          return {
+                            'id': data['id'],
+                            'nome': data['nome'],
+                            'imagem': data['imagem'],
+                            'preco': data['preco'],
+                            'quantidade': data['quantidade'],
+                            'cor': data['cor'],
+                            'tamanho': data['tamanho'],
+                            'observacao': observacoes[doc.id] ?? '',
+                            'retirante': retirante,
+                          };
+                        }).toList();
+
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => TelaPagamentos(
+                              produtos: produtos,
+                              retirante: retirante!,
+                              endereco: {},
+                              formaPagamento: '',
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.shopping_cart_checkout),
+                      label: const Text("Confirmar Compra"),
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 50),
+                        backgroundColor: Colors.amber.shade700,
+                        textStyle: const TextStyle(fontSize: 16),
+                      ),
+                    ),
                   ],
                 ),
               ),

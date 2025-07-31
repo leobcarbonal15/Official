@@ -15,11 +15,17 @@ import 'package:myapp/telas/telas_carrinho/carrinho.dart';
 import 'auth_guard.dart';
 import 'list_client.dart';
 import 'list_admin.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const MyApp());
+
+    await Supabase.initialize(
+    url: 'https://gxpoabwzyshjovvmwgww.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd4cG9hYnd6eXNoam92dm13Z3d3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM2NTA4NTYsImV4cCI6MjA2OTIyNjg1Nn0.8livV6b0iLySnhSOrtu4DdsicEQmEVYd83IsFRfla9U',
+  );
 }
 
 class MyApp extends StatelessWidget {

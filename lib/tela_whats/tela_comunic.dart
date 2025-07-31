@@ -26,7 +26,8 @@ class TelaComunic extends StatelessWidget {
               borderRadius: BorderRadius.circular(30),
             ),
             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
-            textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            textStyle:
+                const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
         ),
       ),
@@ -52,6 +53,8 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   String? latestWhatsAppLink;
+  String? latestWhatsAppNumber;
+
   bool _isLoading = true;
 
   @override
@@ -71,7 +74,8 @@ class _MyHomePageState extends State<MyHomePage> {
 
       if (snapshot.docs.isNotEmpty) {
         setState(() {
-          latestWhatsAppLink = snapshot.docs.first['link'];
+          latestWhatsAppLink = snapshot.docs.first['link'] as String?;
+          latestWhatsAppNumber = snapshot.docs.first['numero'] as String?;
         });
       }
     } catch (e) {
@@ -164,9 +168,11 @@ class _MyHomePageState extends State<MyHomePage> {
                             ),
                             const SizedBox(height: 32),
                             ElevatedButton.icon(
-                              onPressed:
-                                  latestWhatsAppLink != null ? _openWhatsAppLink : null,
-                              icon: const Icon(Icons.chat_bubble_outline, color: Colors.white, size: 28),
+                              onPressed: latestWhatsAppLink != null
+                                  ? _openWhatsAppLink
+                                  : null,
+                              icon: const Icon(Icons.chat_bubble_outline,
+                                  color: Colors.white, size: 28),
                               label: const Text(
                                 'Entre em contato via WhatsApp',
                                 style: TextStyle(
@@ -190,6 +196,33 @@ class _MyHomePageState extends State<MyHomePage> {
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'Ou adicione o número:',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            if (latestWhatsAppNumber != null)
+                              SelectableText(
+                                latestWhatsAppNumber!,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green[900],
+                                ),
+                              )
+                            else
+                              Text(
+                                'Número indisponível no momento.',
+                                style: TextStyle(
+                                  color: Colors.red[700],
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -203,8 +236,8 @@ class _MyHomePageState extends State<MyHomePage> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
-          onPressed: () =>
-              Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => MyApp())),
+          onPressed: () => Navigator.pushReplacement(
+              context, MaterialPageRoute(builder: (_) => MyApp())),
           tooltip: 'Voltar',
         ),
       ),

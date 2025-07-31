@@ -116,6 +116,7 @@ class PedidoCard extends StatefulWidget {
   final VoidCallback onExcluir;
   final Future<void> Function(String email) onNotificar;
   final Future<void> Function(String pedidoId) onMarcarComoEnviado;
+  
 
   const PedidoCard({
     super.key,
@@ -128,6 +129,7 @@ class PedidoCard extends StatefulWidget {
 
   @override
   State<PedidoCard> createState() => _PedidoCardState();
+  
 }
 
 class _PedidoCardState extends State<PedidoCard> {
@@ -144,99 +146,96 @@ class _PedidoCardState extends State<PedidoCard> {
 
   Future<void> devolverProdutosAoEstoque(List<dynamic> produtos) async {
     final firestore = FirebaseFirestore.instance;
-    final batch = firestore.batch();
 
     for (var produto in produtos) {
-      if (produto is Map<String, dynamic>) {
-        final produtoId = produto['id'];
-        final quantidade = produto['quantidade'] ?? 0;
-        final tamanho = produto['tamanho']?.toString();
+      if (produto is! Map<String, dynamic>) continue;
 
-        if (produtoId == null || tamanho == null) continue;
+      final produtoId = produto['id'];
+      final quantidade = produto['quantidade'] ?? 0;
+      final tamanho = produto['tamanho']?.toString();
+      final cor = produto['cor']?.toString();
 
-        final docRef = firestore.collection('estoque').doc(produtoId);
-        final docSnap = await docRef.get();
+      if (produtoId == null || tamanho == null || cor == null) continue;
 
-        if (!docSnap.exists) continue;
+      final docRef = firestore.collection('estoque').doc(produtoId);
+      final docSnap = await docRef.get();
 
-        final dados = docSnap.data() as Map<String, dynamic>;
-        final estoqueMap =
-            Map<String, dynamic>.from(dados['tamanhosComEstoque'] ?? {});
+      if (!docSnap.exists) continue;
 
-        final estoqueAtual = (estoqueMap[tamanho] ?? 0) as int;
-        final novoEstoque = estoqueAtual + quantidade;
+      final dados = docSnap.data() as Map<String, dynamic>;
+      final variacoes = Map<String, dynamic>.from(dados['variacoes'] ?? {});
 
-        estoqueMap[tamanho] = novoEstoque;
-        batch.update(docRef, {'tamanhosComEstoque': estoqueMap});
-      }
+      if (!variacoes.containsKey(cor)) continue;
+
+      final tamanhosMap = Map<String, dynamic>.from(variacoes[cor]);
+      final estoqueAtual = (tamanhosMap[tamanho] ?? 0) as int;
+      tamanhosMap[tamanho] = estoqueAtual + quantidade;
+
+      variacoes[cor] = tamanhosMap;
+
+      await docRef.update({'variacoes': variacoes});
     }
-
-    await batch.commit();
   }
 
   Future<void> cancelarPedido(DocumentSnapshot pedido) async {
     final pedidoId = pedido.id;
-    final pedidoData = pedido.data() as Map<String, dynamic>;
+    final pedidoData = widget.pedido.data() as Map<String, dynamic>;
     final produtos = pedidoData['produtos'] as List<dynamic>? ?? [];
 
     await FirebaseFirestore.instance
         .collection('pedidos')
         .doc(pedidoId)
-        .update({
-      'cancelado': true,
-    });
+        .update({'cancelado': true});
 
     await devolverProdutosAoEstoque(produtos);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final pedido = widget.pedido;
-    final data = pedido['data'] as Timestamp;
-    final produtos = List<Map<String, dynamic>>.from(pedido['produtos']);
-    final endereco = pedido.data().toString().contains('endereco')
-        ? pedido['endereco'] as Map<String, dynamic>
-        : null;
+ @override
+Widget build(BuildContext context) {
+  final pedido = widget.pedido;
+  final pedidoData = pedido.data() as Map<String, dynamic>;
+  final data = pedido['data'] as Timestamp;
+  final produtos = List<Map<String, dynamic>>.from(pedido['produtos']);
+final retirante = produtos.isNotEmpty
+    ? (produtos[0]['retirante']?.toString().trim() ?? 'Não informado')
+    : 'Não informado';
 
-    final retirador = endereco?['retirante']?.toString()?.trim();
 
-    return Card(
-      margin: const EdgeInsets.all(12),
-      child: ExpansionTile(
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Text(
-                "Pedido ${widget.index + 1} - ${data.toDate().toString().substring(0, 16)}",
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: widget.onExcluir,
-            ),
-          ],
-        ),
+  return Card(
+    margin: const EdgeInsets.all(12),
+    child: ExpansionTile(
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          if (retirador != null && retirador.isNotEmpty)
-            ListTile(
-              leading: const Icon(Icons.person_pin_circle_outlined),
-              title: const Text('Quem vai retirar:'),
-              subtitle: Text(retirador),
-            )
-          else
-            const ListTile(
-              leading: Icon(Icons.person_pin_circle_outlined),
-              title: Text('Quem vai retirar:'),
-              subtitle: Text('Não informado'),
+          Expanded(
+            child: Text(
+              "Pedido ${widget.index + 1} - ${data.toDate().toString().substring(0, 16)}",
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete, color: Colors.red),
+            onPressed: widget.onExcluir,
+          ),
+        ],
+      ),
+      children: [
+       ListTile(
+  leading: const Icon(Icons.person_pin_circle_outlined),
+  title: const Text('Quem vai retirar:'),
+  subtitle: Text(retirante),
+),
+
+
+
           ...produtos.map((produto) {
             final nome = produto['nome'] ?? 'Produto';
             final quantidade = produto['quantidade'] ?? 0;
             final preco = produto['preco'] ?? 0.0;
             final imagem = produto['imagem'] ?? '';
             final tamanho = produto['tamanho']?.toString() ?? 'N/A';
+            final cor = produto['cor']?.toString() ?? '';
+            final observacao = produto['observacao']?.toString()?.trim();
 
             return ListTile(
               leading: imagem.isNotEmpty
@@ -244,7 +243,22 @@ class _PedidoCardState extends State<PedidoCard> {
                       width: 50, height: 50, fit: BoxFit.cover)
                   : const Icon(Icons.image_not_supported),
               title: Text(nome),
-              subtitle: Text("Quantidade: $quantidade\nTamanho: $tamanho"),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("Quantidade: $quantidade"),
+                  Text(
+                      "Tamanho: $tamanho ${cor.isNotEmpty ? ' | Cor: $cor' : ''}"),
+                  if (observacao != null && observacao.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        "Observação: $observacao",
+                        style: const TextStyle(fontStyle: FontStyle.italic),
+                      ),
+                    ),
+                ],
+              ),
               trailing: Text("R\$ ${preco.toStringAsFixed(2)}"),
             );
           }).toList(),

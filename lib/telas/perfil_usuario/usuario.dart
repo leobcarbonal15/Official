@@ -158,9 +158,48 @@ class _TelaUsuarioState extends State<TelaUsuario> {
     );
   }
 
-  void _alterarSenha() {
-    // Função de alteração de senha (implemente se necessário)
+ void _alterarSenha() async {
+  final usuario = FirebaseAuth.instance.currentUser;
+
+  if (usuario != null && usuario.email != null) {
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: usuario.email!);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('E-mail de redefinição de senha enviado para ${usuario.email!}'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } on FirebaseAuthException catch (e) {
+      String mensagemErro = 'Erro ao enviar e-mail de redefinição de senha.';
+
+      if (e.code == 'user-not-found') {
+        mensagemErro = 'Usuário não encontrado.';
+      } else if (e.code == 'invalid-email') {
+        mensagemErro = 'E-mail inválido.';
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(mensagemErro),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  } else {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Nenhum usuário logado.'),
+        backgroundColor: Colors.orange,
+      ),
+    );
   }
+}
+
+
 
   @override
   Widget build(BuildContext context) {

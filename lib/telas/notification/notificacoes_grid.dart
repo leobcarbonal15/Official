@@ -156,7 +156,7 @@ class _TelaGridNotificacoesState extends State<TelaGridNotificacoes> {
                             const SizedBox(height: 12),
                            
                             const Text(
-                              'Seu produto foi separado e está pronto para pagamento e retirada na loja.',
+                              'Seu produto foi separado e está pronto para ser retirado na loja.',
                               style: TextStyle(
                                 fontSize: 13,
                                 color: Color.fromARGB(255, 24, 24, 24),

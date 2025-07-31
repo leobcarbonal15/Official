@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:myapp/firebase_options.dart';
 import 'package:myapp/tela_cadastro_produto/editar_produto.dart';
-import 'package:diacritic/diacritic.dart';  // Pacote para remoção de acentos
+import 'package:diacritic/diacritic.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+final supabase = Supabase.instance.client;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,26 +36,53 @@ class GerenciarProdutos extends StatefulWidget {
 }
 
 class _GerenciarProdutosState extends State<GerenciarProdutos> {
-  String searchQuery = ""; // Variável para armazenar a pesquisa
+  String searchQuery = "";
 
-  // Função de exclusão do produto
-  void _excluirProduto(String id, BuildContext context) async {
-    try {
-      await FirebaseFirestore.instance
-          .collection('produtos_hortifruti')
-          .doc(id)
-          .delete();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Produto excluído com sucesso')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erro ao excluir: $e')),
-      );
+  // EXCLUSÃO DE PRODUTO + IMAGENS SUPABASE
+ void _excluirProduto(String id, BuildContext context) async {
+  try {
+    final doc = await FirebaseFirestore.instance.collection('estoque').doc(id).get();
+    final data = doc.data();
+
+    if (data != null && data.containsKey('imagens')) {
+      List<dynamic> imagens = data['imagens'];
+
+      for (var imagemUrl in imagens) {
+        try {
+          final uri = Uri.parse(imagemUrl);
+          final fullPath = uri.path.replaceFirst('/storage/v1/object/', ''); // public/produtos/public/arquivo
+
+          final partes = fullPath.split('/');
+          if (partes.length >= 3) {
+            final bucket = partes[1]; // produtos
+            final caminhoArquivo = partes.sublist(2).join('/'); // public/arquivo.jpg
+
+            final response = await supabase.storage.from(bucket).remove([caminhoArquivo]);
+
+            debugPrint('Imagem removida de $bucket/$caminhoArquivo => $response');
+          } else {
+            debugPrint('Formato inesperado da URL da imagem: $imagemUrl');
+          }
+        } catch (e) {
+          debugPrint('Erro ao excluir imagem do Supabase: $e');
+        }
+      }
     }
-  }
 
-  // Função para alternar o status de estoque
+    // Remove o documento do Firestore
+    await FirebaseFirestore.instance.collection('estoque').doc(id).delete();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Produto excluído com sucesso!')),
+    );
+  } catch (e) {
+    debugPrint('Erro ao excluir produto: $e');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Erro ao excluir: $e')),
+    );
+  }
+}
+
   void _alternarEstoque(String id, bool emEstoque) {
     FirebaseFirestore.instance
         .collection('estoque')
@@ -60,7 +90,6 @@ class _GerenciarProdutosState extends State<GerenciarProdutos> {
         .update({'emEstoque': !emEstoque});
   }
 
-  // Função para alternar o status de promoção
   void _alternarPromocao(String id, bool emPromocao) {
     FirebaseFirestore.instance
         .collection('estoque')
@@ -68,7 +97,6 @@ class _GerenciarProdutosState extends State<GerenciarProdutos> {
         .update({'emPromocao': !emPromocao});
   }
 
-  // Função para mostrar os detalhes do produto
   void _mostrarDetalhesProduto(BuildContext context, Map<String, dynamic> data) {
     showDialog(
       context: context,
@@ -88,9 +116,7 @@ class _GerenciarProdutosState extends State<GerenciarProdutos> {
           actions: <Widget>[
             TextButton(
               child: const Text('Fechar'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
+              onPressed: () => Navigator.of(context).pop(),
             ),
           ],
         );
@@ -98,7 +124,6 @@ class _GerenciarProdutosState extends State<GerenciarProdutos> {
     );
   }
 
-  // Função para normalizar as strings (remover acentos e colocar em minúsculo)
   String normalizeString(String input) {
     return removeDiacritics(input.toLowerCase());
   }
@@ -106,34 +131,27 @@ class _GerenciarProdutosState extends State<GerenciarProdutos> {
   @override
   Widget build(BuildContext context) {
     double larguraTela = MediaQuery.of(context).size.width;
-    bool isSmallScreen = larguraTela < 600; // Dispositivos com tela menor que 600px
+    bool isSmallScreen = larguraTela < 600;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text(
           'Gerenciar Produtos',
-          style: TextStyle(
-            color: Colors.white,
-          ),
+          style: TextStyle(color: Colors.white),
         ),
-        iconTheme: IconThemeData(color: Colors.white),
-        backgroundColor: const Color.fromARGB(255, 0, 0, 0),
+        iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: Colors.black,
       ),
       body: Column(
         children: [
-          // Barra de pesquisa
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: SizedBox(
               height: 40,
               child: TextField(
-                cursorColor: const Color.fromARGB(255, 0, 0, 0),
+                cursorColor: Colors.black,
                 style: const TextStyle(fontSize: 14),
-                onChanged: (query) {
-                  setState(() {
-                    searchQuery = query; // Atualiza a consulta de pesquisa
-                  });
-                },
+                onChanged: (query) => setState(() => searchQuery = query),
                 decoration: InputDecoration(
                   hintText: 'Busque por nome do produto',
                   filled: true,
@@ -147,12 +165,9 @@ class _GerenciarProdutosState extends State<GerenciarProdutos> {
               ),
             ),
           ),
-          // StreamBuilder para buscar os produtos com base na pesquisa
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('estoque')
-                  .snapshots(),
+              stream: FirebaseFirestore.instance.collection('estoque').snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -164,14 +179,10 @@ class _GerenciarProdutosState extends State<GerenciarProdutos> {
 
                 final produtos = snapshot.data!.docs;
 
-                // Filtra os produtos com base na pesquisa
                 final filteredProdutos = produtos.where((produto) {
                   final data = produto.data() as Map<String, dynamic>;
                   final nomeProduto = data['nome'] ?? '';
-
-                  // Normaliza a string e compara
-                  return normalizeString(nomeProduto)
-                      .contains(normalizeString(searchQuery));
+                  return normalizeString(nomeProduto).contains(normalizeString(searchQuery));
                 }).toList();
 
                 return ListView.builder(
@@ -180,7 +191,6 @@ class _GerenciarProdutosState extends State<GerenciarProdutos> {
                     final produto = filteredProdutos[index];
                     final data = produto.data() as Map<String, dynamic>;
                     final String id = produto.id;
-
                     final String? imagemUrl = data['imagemUrl'];
 
                     return Card(
@@ -196,11 +206,8 @@ class _GerenciarProdutosState extends State<GerenciarProdutos> {
                               ? Image.network(
                                   imagemUrl,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (BuildContext context,
-                                      Object exception, StackTrace? stackTrace) {
-                                    debugPrint('Erro ao carregar imagem: $imagemUrl');
-                                    return const Icon(Icons.broken_image, size: 40);
-                                  },
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const Icon(Icons.broken_image, size: 40),
                                 )
                               : const Icon(Icons.local_florist_outlined, size: 40),
                         ),
@@ -215,10 +222,7 @@ class _GerenciarProdutosState extends State<GerenciarProdutos> {
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'R\$ ${data['preco'].toString()}',
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            Text('R\$ ${data['preco'].toString()}', overflow: TextOverflow.ellipsis),
                             Text(
                               data['descricao'] ?? '',
                               style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
@@ -233,12 +237,8 @@ class _GerenciarProdutosState extends State<GerenciarProdutos> {
                           children: [
                             IconButton(
                               icon: Icon(
-                                data['emPromocao'] == true
-                                    ? Icons.local_offer
-                                    : Icons.loyalty,
-                                color: data['emPromocao'] == true
-                                    ? Colors.orange
-                                    : Colors.grey,
+                                data['emPromocao'] == true ? Icons.local_offer : Icons.loyalty,
+                                color: data['emPromocao'] == true ? Colors.orange : Colors.grey,
                                 size: isSmallScreen ? 20 : 24,
                               ),
                               onPressed: () => _alternarPromocao(id, data['emPromocao'] == true),
@@ -251,9 +251,7 @@ class _GerenciarProdutosState extends State<GerenciarProdutos> {
                                 data['emEstoque'] == true
                                     ? Icons.inventory
                                     : Icons.remove_shopping_cart,
-                                color: data['emEstoque'] == true
-                                    ? Colors.green
-                                    : Colors.red,
+                                color: data['emEstoque'] == true ? Colors.green : Colors.red,
                                 size: isSmallScreen ? 20 : 24,
                               ),
                               onPressed: () => _alternarEstoque(id, data['emEstoque'] == true),
@@ -262,11 +260,7 @@ class _GerenciarProdutosState extends State<GerenciarProdutos> {
                                   : 'Marcar como em estoque',
                             ),
                             IconButton(
-                              icon: Icon(
-                                Icons.edit,
-                                color: Colors.blue,
-                                size: isSmallScreen ? 20 : 24,
-                              ),
+                              icon: Icon(Icons.edit, color: Colors.blue, size: isSmallScreen ? 20 : 24),
                               onPressed: () {
                                 Navigator.push(
                                   context,
@@ -277,11 +271,7 @@ class _GerenciarProdutosState extends State<GerenciarProdutos> {
                               },
                             ),
                             IconButton(
-                              icon: Icon(
-                                Icons.delete,
-                                color: Colors.red,
-                                size: isSmallScreen ? 20 : 24,
-                              ),
+                              icon: Icon(Icons.delete, color: Colors.red, size: isSmallScreen ? 20 : 24),
                               onPressed: () => _excluirProduto(id, context),
                             ),
                           ],
