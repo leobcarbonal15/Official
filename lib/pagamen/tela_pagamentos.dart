@@ -56,6 +56,35 @@ class _TelaPagamentosState extends State<TelaPagamentos> {
     }
   }
 
+  Future<void> atualizarEstatisticas(List<dynamic> produtos, item) async {
+  final estatisticasRef = FirebaseFirestore.instance.collection('estatisticas');
+
+  for (var produto in produtos) {
+    final produtoId = produto['id'];
+    final quantidadeVendida = (produto['quantidade'] ?? 0) as int;
+
+    if (produtoId == null || quantidadeVendida <= 0) continue;
+
+    final docRef = estatisticasRef.doc(produtoId);
+    final docSnap = await docRef.get();
+
+    if (docSnap.exists) {
+      final dadosAtuais = docSnap.data() as Map<String, dynamic>;
+      final totalAnterior = (dadosAtuais['quantidade_vendida'] ?? 0) as int;
+      final novoTotal = totalAnterior + quantidadeVendida;
+
+      await docRef.update({'quantidade_vendida': novoTotal});
+    } else {
+      await docRef.set({
+        'produtoId': produtoId,
+        'quantidade_vendida': quantidadeVendida,
+        'ultima_venda': Timestamp.now(),
+      });
+    }
+  }
+}
+
+
   Future<void> limparCarrinho() async {
     try {
       final carrinhoRef = FirebaseFirestore.instance.collection('carrinho');
@@ -286,15 +315,20 @@ Widget build(BuildContext context) {
           ),
           const SizedBox(height: 12),
 
-          ElevatedButton.icon(
-            onPressed: () => salvarPedido(context),
-            icon: const Icon(Icons.check_circle_outline),
-            label: const Text("Confirmar Pagamento"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              minimumSize: const Size(double.infinity, 50),
-            ),
-          ),
+         ElevatedButton.icon(
+  onPressed: () async {
+    await salvarPedido(context);
+
+   await atualizarEstatisticas(widget.produtos, null);
+
+  },
+  icon: const Icon(Icons.check_circle_outline),
+  label: const Text("Confirmar Pagamento"),
+  style: ElevatedButton.styleFrom(
+    backgroundColor: Colors.green,
+    minimumSize: const Size(double.infinity, 50),
+  ),
+),
 
           const SizedBox(height: 10),
 

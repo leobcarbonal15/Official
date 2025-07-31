@@ -5,21 +5,37 @@ class EstatisticasPage extends StatelessWidget {
   const EstatisticasPage({super.key});
 
   Future<List<Map<String, dynamic>>> _buscarEstatisticas() async {
-    final snapshot = await FirebaseFirestore.instance
-        .collection('estatisticas')
-        .orderBy('quantidade_total', descending: true)
-        .get();
+  final estatisticasSnap = await FirebaseFirestore.instance
+      .collection('estatisticas')
+      .orderBy('quantidade_vendida', descending: true)
+      .get();
 
-    return snapshot.docs.map((doc) {
-      final data = doc.data();
-      return {
-        'id': doc.id,
-        'nome': data['nome'],
-        'quantidade_total': data['quantidade_total'],
-        'ultima_venda': (data['ultima_venda'] as Timestamp).toDate(),
-      };
-    }).toList();
+  List<Map<String, dynamic>> resultados = [];
+
+  for (var doc in estatisticasSnap.docs) {
+    final data = doc.data();
+    final produtoId = data['produtoId'];
+    final quantidade = data['quantidade_vendida'];
+    final ultimaVenda = (data['ultima_venda'] as Timestamp).toDate();
+
+    // Buscar nome do produto na coleção estoque
+    String nome = "Produto desconhecido";
+    final produtoSnap = await FirebaseFirestore.instance.collection('estoque').doc(produtoId).get();
+    if (produtoSnap.exists) {
+      final dadosProduto = produtoSnap.data()!;
+      nome = dadosProduto['nome'] ?? nome;
+    }
+
+    resultados.add({
+      'id': doc.id,
+      'nome': nome,
+      'quantidade_total': quantidade,
+      'ultima_venda': ultimaVenda,
+    });
   }
+
+  return resultados;
+}
 
   Future<void> _limparEstatisticas(BuildContext context) async {
     final confirm = await showDialog<bool>(
